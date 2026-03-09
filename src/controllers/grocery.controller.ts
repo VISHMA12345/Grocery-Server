@@ -1,0 +1,287 @@
+import { Body, Delete, Get, JsonController, Param, Patch, Post, QueryParams, Req, Res } from "routing-controllers";
+import { handleErrorResponse, pagination, response } from "../utils";
+import { AppDataSource } from "../data-source";
+import { Product } from "../entity/Product";
+import { AddItemToBucketDto } from "../dto/GroceryBucket.dto";
+import { GroceryBucket } from "../entity/GroceryBucket";
+import { ObjectId } from "mongodb";
+import { AuthMiddleware, AuthPayload } from "../middlewares/AuthMiddleware";
+import { UseBefore } from "routing-controllers";
+interface RequestWithUser extends Request {
+    user: AuthPayload;
+}
+@UseBefore(AuthMiddleware)
+@JsonController("/groceries")
+
+export class GroceryController {
+    private productRepo = AppDataSource.getMongoRepository(Product);
+    private bucketRepo = AppDataSource.getMongoRepository(GroceryBucket);
+    @Post("/")
+    async createGroceryList(
+        @Body() body: AddItemToBucketDto,
+        @Res() res: Response,
+        @Req() req: RequestWithUser
+    ) {
+        try {
+
+            const userId = new ObjectId(req.user.userId);
+
+            const items = body.items.map(i => ({
+                productId: new ObjectId(i.productId),
+                quantity: i.quantity,
+                unit: i.unit,
+                assignedTo: i.assignedTo,
+                isCompleted: 0
+            }));
+
+            const list = new GroceryBucket();
+
+            list.userId = userId;
+            list.listName = body.listName;
+            list.storeName = body.storeName;
+            list.items = items;
+            list.isActive = 1;
+            list.isDelete = 0;
+
+            const saved = await this.bucketRepo.save(list);
+
+            return response(res, 200, "Grocery list created", saved);
+
+        } catch (error) {
+            return handleErrorResponse(error, res);
+        }
+    }
+    @Get("/")
+    async getList(
+        @Res() res: Response,
+        @Req() req: RequestWithUser,
+        @QueryParams() query: any
+    ) {
+        try {
+
+            const userId = new ObjectId(req.user.userId);
+
+            const converted =
+                query.converted === "true"
+                    ? true
+                    : query.converted === "false"
+                        ? false
+                        : undefined;
+
+            const match: any = {
+                isDelete: 0,
+                $or: [
+                    { userId: userId },      // creator
+                    { partnerId: userId }    // partner
+                ]
+            };
+
+            if (converted !== undefined) {
+                match.converted_to_basket = converted;
+            }
+
+            const list = await this.bucketRepo.aggregate([
+
+                { $match: match },
+
+                {
+                    $lookup: {
+                        from: "products",
+                        localField: "items.productId",
+                        foreignField: "_id",
+                        as: "productDetails"
+                    }
+                },
+
+                {
+                    $addFields: {
+                        itemCount: { $size: "$items" }
+                    }
+                },
+
+                {
+                    $project: {
+                        listName: 1,
+                        storeName: 1,
+                        itemCount: 1,
+                        createdAt: 1
+                    }
+                },
+
+                {
+                    $sort: { createdAt: -1 }
+                }
+
+            ]).toArray();
+
+            return response(res, 200, "List fetched successfully", list);
+
+        } catch (error) {
+            return handleErrorResponse(error, res);
+        }
+    }
+    @Get("/:listId")
+    async getListDetail(
+        @Param("listId") listId: string,
+        @Res() res: Response
+    ) {
+        try {
+
+            const list = await this.bucketRepo.aggregate([
+                {
+                    $match: {
+                        _id: new ObjectId(listId),
+                        isDelete: 0
+                    }
+                },
+
+                { $unwind: "$items" },
+
+                {
+                    $lookup: {
+                        from: "products",
+                        localField: "items.productId",
+                        foreignField: "_id",
+                        as: "product"
+                    }
+                },
+
+                {
+                    $unwind: {
+                        path: "$product",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+
+                {
+                    $group: {
+                        _id: "$_id",
+                        listName: { $first: "$listName" },
+                        storeName: { $first: "$storeName" },
+                        createdAt: { $first: "$createdAt" },
+                        items: {
+                            $push: {
+                                productId: "$items.productId",
+                                productName: "$product.name",
+                                quantity: "$items.quantity",
+                                unit: "$items.unit",
+                                assignedTo: "$items.assignedTo",
+                                isCompleted: "$items.isCompleted"
+                            }
+                        }
+                    }
+                }
+
+            ]).toArray();
+
+            if (!list.length) {
+                return response(res, 404, "Grocery list not found");
+            }
+
+            return response(res, 200, "List fetched successfully", list[0]);
+
+        } catch (error) {
+            return handleErrorResponse(error, res);
+        }
+    }
+    @Patch("/:listId")
+    async updateGroceryList(
+        @Param("listId") listId: string,
+        @Body() body: AddItemToBucketDto,
+        @Res() res: Response,
+        @Req() req: RequestWithUser
+    ) {
+        try {
+
+            const bucket = await this.bucketRepo.findOne({
+                where: {
+                    _id: new ObjectId(listId),
+                    isDelete: 0
+                }
+            });
+
+            if (!bucket) {
+                return response(res, 404, "Grocery list not found");
+            }
+
+            if (body.listName) bucket.listName = body.listName;
+            if (body.storeName) bucket.storeName = body.storeName;
+
+            if (body.items) {
+
+                bucket.items = body.items.map(i => ({
+                    productId: new ObjectId(i.productId),
+                    quantity: i.quantity,
+                    unit: i.unit,
+                    assignedTo: i.assignedTo,
+                    isCompleted: 0
+                }));
+
+            }
+
+            bucket.userId = new ObjectId(req.user.userId);
+
+            const updated = await this.bucketRepo.save(bucket);
+
+            return response(res, 200, "Grocery list updated successfully", updated);
+
+        } catch (error) {
+            return handleErrorResponse(error, res);
+        }
+    }
+    @Delete("/:listId")
+    async deleteList(
+        @Param("listId") listId: string,
+        @Res() res: Response
+    ) {
+        try {
+
+            const bucket = await this.bucketRepo.findOne({
+                where: { _id: new ObjectId(listId), isDelete: 0 }
+            });
+
+            if (!bucket) {
+                return response(res, 404, "List not found");
+            }
+
+            bucket.isDelete = 1;
+
+            await this.bucketRepo.save(bucket);
+
+            return response(res, 200, "Grocery list deleted successfully");
+
+        } catch (error) {
+            return handleErrorResponse(error, res);
+        }
+    }
+    @Patch("/convert/:listId")
+    async convertToBucket(
+        @Param("listId") listId: string,
+        @Res() res: Response,
+        @Req() req: RequestWithUser
+    ) {
+        try {
+
+            const bucket = await this.bucketRepo.findOne({
+                where: {
+                    _id: new ObjectId(listId),
+                    isDelete: 0
+                }
+            });
+
+            if (!bucket) {
+                return response(res, 404, "Grocery list not found");
+            }
+
+            bucket.converted_to_basket = true;
+            bucket.userId = new ObjectId(req.user.userId);
+
+            const updated = await this.bucketRepo.save(bucket);
+
+            return response(res, 200, "Grocery list converted to basket successfully", updated);
+
+        } catch (error) {
+            return handleErrorResponse(error, res);
+        }
+    }
+}
