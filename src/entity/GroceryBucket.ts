@@ -31,6 +31,9 @@ export class GroceryBucket {
     @Column({ default: false })
     converted_to_basket: Boolean;
 
+     @Column({ default: false })
+    completedStatus: Boolean;
+
     @Column({ default: 1 })
     isActive: number;
 

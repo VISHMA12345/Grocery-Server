@@ -80,6 +80,12 @@ export class GroceryController {
                 match.converted_to_basket = converted;
             }
 
+            if (query.completed === "true") {
+                match.completedStatus = true;
+            }
+            if (query.canceled === "true") {
+                match.isDelete = 1;
+            }
             const list = await this.bucketRepo.aggregate([
 
                 { $match: match },
@@ -104,7 +110,8 @@ export class GroceryController {
                         listName: 1,
                         storeName: 1,
                         itemCount: 1,
-                        createdAt: 1
+                        createdAt: 1,
+                        productDetails: 1
                     }
                 },
 
@@ -159,12 +166,20 @@ export class GroceryController {
                         listName: { $first: "$listName" },
                         storeName: { $first: "$storeName" },
                         createdAt: { $first: "$createdAt" },
+
                         items: {
                             $push: {
                                 productId: "$items.productId",
                                 productName: "$product.name",
-                                quantity: "$items.quantity",
-                                unit: "$items.unit",
+
+                                quantityText: {
+                                    $concat: [
+                                        { $toString: "$items.quantity" },
+                                        " ",
+                                        "$items.unit"
+                                    ]
+                                },
+
                                 assignedTo: "$items.assignedTo",
                                 isCompleted: "$items.isCompleted"
                             }
