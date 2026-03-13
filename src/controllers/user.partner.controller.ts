@@ -66,17 +66,14 @@ export class UserPartnersController {
         try {
 
             const userId = new ObjectId(req.user.userId);
-
+             console.log(userId);
             const partner = await AppDataSource
                 .getMongoRepository(UserPartner)
                 .aggregate([
 
                     {
                         $match: {
-                            $or: [
-                                { userId },
-                                { partnerId: userId }
-                            ],
+                            partnerId: userId , 
                             isDelete: 0
                         }
                     },
