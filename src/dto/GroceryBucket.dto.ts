@@ -3,7 +3,8 @@ import {
     IsNumber,
     IsString,
     ValidateNested,
-    IsArray
+    IsArray,
+    IsOptional
 } from "class-validator";
 import { Type } from "class-transformer";
 
@@ -20,8 +21,9 @@ class GroceryItemDto {
     @IsString()
     unit: string;
 
+    @IsOptional()
     @IsString()
-    assignedTo: string;
+    assignedTo?: string;
 }
 
 export class AddItemToBucketDto {
@@ -30,7 +32,7 @@ export class AddItemToBucketDto {
     @IsNotEmpty()
     listName: string;
 
-    @IsString()
+    @IsString() 
     @IsNotEmpty()
     storeName: string;
 
