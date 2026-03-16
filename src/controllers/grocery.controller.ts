@@ -23,6 +23,8 @@ export class GroceryController {
         @Req() req: RequestWithUser
     ) {
         try {
+           console.log(body,'details---------------------------');
+
 
             const userId = new ObjectId(req.user.userId);
 
@@ -30,9 +32,14 @@ export class GroceryController {
                 productId: new ObjectId(i.productId),
                 quantity: i.quantity,
                 unit: i.unit,
-                assignedTo: i.assignedTo,
+                assignedTo: i.assignedTo == null || i.assignedTo == "" ? userId : new ObjectId(i.assignedTo),  
                 isCompleted: 0
             }));
+
+            if (items.length === 0) {
+                return response(res, 400, "No items provided");
+            }
+
 
             const list = new GroceryBucket();
 
@@ -42,12 +49,16 @@ export class GroceryController {
             list.items = items;
             list.isActive = 1;
             list.isDelete = 0;
+            list.status = "pending";
+
 
             const saved = await this.bucketRepo.save(list);
 
             return response(res, 200, "Grocery list created", saved);
 
         } catch (error) {
+           console.log(error,'details---------------------------');
+
             return handleErrorResponse(error, res);
         }
     }
@@ -135,58 +146,72 @@ export class GroceryController {
         try {
 
             const list = await this.bucketRepo.aggregate([
-                {
-                    $match: {
-                        _id: new ObjectId(listId),
-                        isDelete: 0
-                    }
-                },
-
-                { $unwind: "$items" },
-
-                {
-                    $lookup: {
-                        from: "products",
-                        localField: "items.productId",
-                        foreignField: "_id",
-                        as: "product"
-                    }
-                },
-
-                {
-                    $unwind: {
-                        path: "$product",
-                        preserveNullAndEmptyArrays: true
-                    }
-                },
-
-                {
-                    $group: {
-                        _id: "$_id",
-                        listName: { $first: "$listName" },
-                        storeName: { $first: "$storeName" },
-                        createdAt: { $first: "$createdAt" },
-
-                        items: {
-                            $push: {
-                                productId: "$items.productId",
-                                productName: "$product.name",
-
-                                quantityText: {
-                                    $concat: [
-                                        { $toString: "$items.quantity" },
-                                        " ",
-                                        "$items.unit"
-                                    ]
-                                },
-
-                                assignedTo: "$items.assignedTo",
-                                isCompleted: "$items.isCompleted"
-                            }
-                        }
-                    }
+            {
+                $match: {
+                    _id:new ObjectId(listId)
                 }
+            },
 
+            {
+                $lookup: {
+                from: "users",
+                localField: "userId",
+                foreignField: "_id",
+                as: "createdUser"
+                }
+            },
+
+            {
+                $unwind: "$items"
+            },
+
+            {
+                $lookup: {
+                from: "products",
+                localField: "items.productId",
+                foreignField: "_id",
+                as: "product"
+                }
+            },
+
+            {
+                $lookup: {
+                from: "users",
+                localField: "items.assignedTo",
+                foreignField: "_id",
+                as: "assignedUser"
+                }
+            },
+
+            {
+                $addFields: {
+                "items.product": { $arrayElemAt: ["$product", 0] },
+                "items.assignedUser": { $arrayElemAt: ["$assignedUser", 0] }
+                }
+            },
+
+            {
+                $project: {
+                product: 0,
+                assignedUser: 0
+                }
+            },
+
+            {
+                $group: {
+                _id: "$_id",
+                userId: { $first: "$userId" },
+                listName: { $first: "$listName" },
+                storeName: { $first: "$storeName" },
+                items: { $push: "$items" },
+                createdUser: { $first: "$createdUser" },
+                isActive: { $first: "$isActive" },
+                isDelete: { $first: "$isDelete" },
+                createdAt: { $first: "$createdAt" },
+                updatedAt: { $first: "$updatedAt" },
+                converted_to_basket: { $first: "$converted_to_basket" }
+                }
+            }
             ]).toArray();
 
             if (!list.length) {
@@ -228,7 +253,7 @@ export class GroceryController {
                     productId: new ObjectId(i.productId),
                     quantity: i.quantity,
                     unit: i.unit,
-                    assignedTo: i.assignedTo,
+                    assignedTo:i.assignedTo == "" ? new ObjectId(req.user.userId) :new ObjectId(i.assignedTo),
                     isCompleted: 0
                 }));
 
@@ -241,7 +266,8 @@ export class GroceryController {
             return response(res, 200, "Grocery list updated successfully", updated);
 
         } catch (error) {
-            return handleErrorResponse(error, res);
+            console.log(error);
+            return handleErrorResponse(error, res)
         }
     }
     @Delete("/:listId")
@@ -299,4 +325,86 @@ export class GroceryController {
             return handleErrorResponse(error, res);
         }
     }
+
+
+      @Get("/activeList/:status")
+async getActiveList(
+    @Param("status") status: string,
+    @Req() req: RequestWithUser,
+    @Res() res: Response
+) {
+    try {
+
+        const userId = new ObjectId(req.user.userId);
+
+        const list = await this.bucketRepo.aggregate([
+
+            {
+                $match: {
+                    isDelete: 0,
+                    status: status
+                }
+            },
+
+            // break items array
+            {
+                $unwind: "$items"
+            },
+
+            // check assignedTo matches logged user
+            {
+                $match: {
+                    "items.assignedTo": userId
+                }
+            },
+
+            // populate product
+            {
+                $lookup: {
+                    from: "products",
+                    localField: "items.productId",
+                    foreignField: "_id",
+                    as: "product"
+                }
+            },
+
+            {
+                $unwind: {
+                    path: "$product",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+
+            // attach product inside items
+            {
+                $addFields: {
+                    "items.product": "$product"
+                }
+            },
+
+            // regroup items back
+            {
+                $group: {
+                    _id: "$_id",
+                    userId: { $first: "$userId" },
+                    partnerId: { $first: "$partnerId" },
+                    listName: { $first: "$listName" },
+                    storeName: { $first: "$storeName" },
+                    status: { $first: "$status" },
+                    items: { $push: "$items" },
+                    createdAt: { $first: "$createdAt" }
+                }
+            }
+
+        ]).toArray();
+
+    
+
+        return response(res, 200, "Assigned lists fetched successfully", list ?? []);
+
+    } catch (error) {
+        return handleErrorResponse(error, res);
+    }
+}
+
 }

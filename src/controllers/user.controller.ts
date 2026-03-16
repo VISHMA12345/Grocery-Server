@@ -48,6 +48,24 @@ export class UserController {
             const existingUser = await this.userRepo.findOne({
                 where: { phoneNumber: body.phoneNumber, isDelete: 0 }
             });
+
+            const existingUserName = await this.userRepo.findOne({
+                where: { name: body.name, isDelete: 0 }
+            });
+
+               if (existingUserName) {
+                return response(res, StatusCodes.CONFLICT, "user name already registered");
+            }
+
+                 const existingUserEmail = await this.userRepo.findOne({
+                where: { email: body.email, isDelete: 0 }
+            });
+
+               if (existingUserEmail) {
+                return response(res, StatusCodes.CONFLICT, "Email  already registered");
+            }
+
+
             if (existingUser) {
                 return response(res, StatusCodes.CONFLICT, "Phone number already registered");
             }

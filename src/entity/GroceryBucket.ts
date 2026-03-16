@@ -19,12 +19,15 @@ export class GroceryBucket {
     @Column()
     storeName: string;
 
+     @Column()
+    status: string;
+
     @Column("simple-json")
     items: {
         productId: ObjectId;
         quantity: number;
         unit: string;
-        assignedTo: string;
+        assignedTo: ObjectId;
         isCompleted: number;
     }[];
 
@@ -33,6 +36,8 @@ export class GroceryBucket {
 
      @Column({ default: false })
     completedStatus: Boolean;
+
+
 
     @Column({ default: 1 })
     isActive: number;
