@@ -7,7 +7,8 @@ const isProd = process.env.NODE_ENV === "prod";
 
 export const AppDataSource = new DataSource({
     type: "mongodb",
-    url: process.env.MONGO_URI || "",
+    url: process.env.MONGO_URI,
+    database: process.env.DB_NAME,
     synchronize: false,
     logging: !isProd,
 
