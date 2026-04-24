@@ -1,5 +1,7 @@
-import "reflect-metadata";
 import express from "express";
+import dns from "dns";
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
+dns.setDefaultResultOrder("ipv4first");
 import cors from "cors";
 import { useExpressServer } from "routing-controllers";
 import { AppDataSource } from "./data-source";
@@ -9,7 +11,7 @@ import { notificationCron } from "./cron/notification";
 AppDataSource.initialize()
   .then(async () => {
 
-    console.log("✅ Database connected");
+    console.log(`✅ Database connected: ${AppDataSource.options.database}`);
     // Cron job
     if (process.env.ENABLE_CRON === "true") {
       new notificationCron().weeklyNotification();
