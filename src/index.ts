@@ -18,6 +18,7 @@ AppDataSource.initialize()
 
     // 1. CRITICAL: Comprehensive CORS Configuration
     const allowedOrigins = [
+      "https://groceryhelpert.netlify.app",
       "https://grocery-server-1-16fr.onrender.com",
       "http://localhost:3000",
       "http://localhost:5173",
