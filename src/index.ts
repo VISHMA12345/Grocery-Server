@@ -18,11 +18,25 @@ AppDataSource.initialize()
     }
 
     const app = express();
+    const allowedOrigins = [
+      "https://grocery-server-1-16fr.onrender.com",
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "http://localhost:3001",
+    ];
+
     app.use(
       cors({
-        origin: "*",
+        origin: (origin, callback) => {
+          if (!origin) return callback(null, true);
+          if (allowedOrigins.includes(origin) || origin.startsWith("http://localhost")) {
+            callback(null, true);
+          } else {
+            callback(new Error("Not allowed by CORS"));
+          }
+        },
         methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Origin", "Content-Type", "Authorization"],
+        allowedHeaders: ["Origin", "Content-Type", "Authorization", "Accept"],
         credentials: true
       })
     );
