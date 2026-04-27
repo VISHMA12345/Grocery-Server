@@ -61,7 +61,7 @@ AppDataSource.initialize()
     }
 
     // 3. Other Middlewares
-    app.use(express.json()); // Essential for parsing JSON bodies
+    // Routing Controllers will handle JSON parsing by default via @Body()
     app.use(
       fileUpload({
         limits: { fileSize: 10 * 1024 * 1024 },
